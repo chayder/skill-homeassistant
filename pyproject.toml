@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "skill-homeassistant"
-version = "0.5.3"
+version = "1.0.0"
 description = "A unified OVOS/Neon.AI Skill for Home Assistant."
 authors = ["Mike Gray <mike@oscillatelabs.net>"]
 readme = "README.md"
@@ -28,11 +28,10 @@ test = ["neon-minerva"]
 python = "^3.9,<4.0"
 ovos-bus-client = ">=0.0.8"
 ovos-workshop = ">=0.0.15"
-setuptools = "^80.9.0"
+setuptools = "<81.0"
 ovos-plugin-manager = ">=0.0.23"
 ovos-utils = ">=0.0.27"
 ovos-config = ">=0.0.5"
-ovos-phal-plugin-oauth = ">=0.0.3"
 nested-lookup = ">=0.2,<1.0"
 webcolors = ">=24.11.1"
 urllib3 = ">=2.6.3"
@@ -69,7 +68,7 @@ profile = "black"
 
 [tool.poe.tasks.test]
 help = "Run the test suite"
-cmd = "pytest --cov=skill_homeassistant --cov-report term-missing --cov-report xml --junitxml=tests/unit-test-results.xml -vv test/"
+cmd = "pytest --cov=skill_homeassistant --cov-report term-missing --cov-report xml --junitxml=test/unit-test-results.xml -vv test/"
 
 [tool.poe.tasks.format]
 help = "Run code formatters"
@@ -82,7 +81,7 @@ shell = "black --line-length=119 skill_homeassistant && isort --overwrite-in-pla
 "skill_homeassistant.oscillatelabsllc" = "skill_homeassistant:HomeAssistantSkill"
 
 [tool.poetry.plugins."ovos.plugin.skill"]
-"skill_homeassistant.oscillatelabsllc" = "skill_homeassistant:HomeAssistantSkill"
+"skill-homeassistant.oscillatelabsllc" = "skill_homeassistant:HomeAssistantSkill"
 
 [tool.pylint.messages_control]
 disable = [
@@ -92,3 +91,6 @@ disable = [
 
 [tool.coverage.run]
 relative_files = true
+omit = [
+    "skill_homeassistant/ha_client/logic/base.py",
+]

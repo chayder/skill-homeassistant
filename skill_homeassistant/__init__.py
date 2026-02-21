@@ -11,7 +11,14 @@ from skill_homeassistant.ha_client import HomeAssistantClient
 class HomeAssistantSkill(OVOSSkill):
     """Unified Home Assistant skill for OpenVoiceOS or Neon.AI."""
 
-    _settings_defaults = {"silent_entities": set(), "disable_intents": False, "timeout": 5, "verify_ssl": True}
+    _settings_defaults = {
+        "host": "",
+        "api_key": "",
+        "silent_entities": set(),
+        "disable_intents": False,
+        "timeout": 5,
+        "verify_ssl": True,
+    }
     _intents_enabled = True
     connected_intents = (
         "sensor.intent",
@@ -63,12 +70,18 @@ class HomeAssistantSkill(OVOSSkill):
             self.log.info("User has indicated they do not want to use Home Assistant intents. Disabling.")
             self.disable_ha_intents()
 
+        # Register for settings changes to update client config
+        self.settings_change_callback = self._on_settings_changed
+
+    def _on_settings_changed(self):
+        """Handle settings changes by updating the Home Assistant client config."""
+        self.log.info("Settings changed, updating Home Assistant client configuration")
+        new_config = self._get_client_config()
+        self.ha_client.update_config(new_config)
+
     def _get_client_config(self) -> dict:
         if self.settings.get("host") and self.settings.get("api_key"):
             return {**self._settings_defaults, **self.settings}
-        phal_config = self.config_core.get("PHAL", {}).get("ovos-PHAL-plugin-homeassistant")
-        if phal_config:
-            return {**self._settings_defaults, **phal_config, **self.settings}
         self.log.error(
             "No Home Assistant config found! Please set host and api_key "
             f"in the skill settings at {self.settings_path}."
@@ -114,9 +127,13 @@ class HomeAssistantSkill(OVOSSkill):
     # Handlers
     @intent_handler("get.all.devices.intent")
     def handle_rebuild_device_list(self, _: Message):
-        self.ha_client.build_devices()
-        self.speak_dialog("acknowledge")
-        self.gui.show_text("Rebuilding device list from Home Assistant")
+        if not self.check_client_connection():
+            self.log.warning("Cannot rebuild device list: Home Assistant connection not available")
+            return
+        self.gui.show_text("Refreshing device list from Home Assistant...")
+        device_count = self.ha_client.refresh_devices()
+        self.speak_dialog("rebuild.complete", data={"count": device_count})
+        self.gui.show_text(f"Device list refreshed: {device_count} devices found")
 
     @intent_handler("enable.intent")
     def handle_enable_intent(self, _: Message):
@@ -134,11 +151,13 @@ class HomeAssistantSkill(OVOSSkill):
     def get_device_intent(self, message: Message):
         """Handle intent to get a single device status from Home Assistant."""
         self.log.info(message.data)
+        if not self.check_client_connection():
+            return
         device = message.data.get("entity", "")
         if device:
             device_data = self.ha_client.handle_get_device(Message("", {"device": device}))
             if device_data:
-                device_name = (device_data.get("attributes", {}).get("friendly_name", device_data.get("name")),)
+                device_name = device_data.get("attributes", {}).get("friendly_name", device_data.get("name"))
                 device_type = device_data.get("type")
                 device_state = device_data.get("state")
                 self.speak_dialog(
@@ -205,11 +224,31 @@ class HomeAssistantSkill(OVOSSkill):
 
         self.gui.show_text(f"{device}: {success_message}")
         return True
+    
+    def check_client_connection(self):
+        if not self.ha_client.instance_available:
+            try:
+                self.ha_client.init_configuration(self.settings)
+                if not self.ha_client.instance_available:
+                    raise Exception("Home Assistant instance is not available")
+                return True
+            except Exception as e:
+                self.log.error(f"Error initializing Home Assistant client: {e}")
+                self.gui.show_text("Connection to Home Assistant is not configured or unavailable. Please check skill settings.")
+                self.speak_dialog("device.status", data={
+                    "device": "Home Assistant",
+                    "type": "server",
+                    "state": "not configured, check your skill settings or connection to Home Assistant instance."
+                    })
+                return False
+        return True
 
     @intent_handler("turn.on.intent")  # pragma: no cover
     def handle_turn_on_intent(self, message: Message) -> None:
         """Handle turn on intent."""
         self.log.info(message.data)
+        if not self.check_client_connection():
+            return
         if device := self._get_device_from_message(message):
             response = self.ha_client.handle_turn_on(Message("", {"device": device}))
             if not self._handle_device_response(
@@ -222,6 +261,8 @@ class HomeAssistantSkill(OVOSSkill):
     def handle_turn_off_intent(self, message: Message) -> None:
         """Handle turn off intent."""
         self.log.info(message.data)
+        if not self.check_client_connection():
+            return
         if device := self._get_device_from_message(message):
             response = self.ha_client.handle_turn_off(Message("", {"device": device}))
             if not self._handle_device_response(
@@ -232,6 +273,8 @@ class HomeAssistantSkill(OVOSSkill):
     @intent_handler("lights.get.brightness.intent")  # pragma: no cover
     def handle_get_brightness_intent(self, message: Message):
         self.log.info(message.data)
+        if not self.check_client_connection():
+            return
         if device := self._get_device_from_message(message):
             response = self.ha_client.handle_get_light_brightness(Message("", {"device": device}))
             if response and not response.get("response"):
@@ -248,6 +291,8 @@ class HomeAssistantSkill(OVOSSkill):
     @intent_handler("lights.set.brightness.intent")  # pragma: no cover
     def handle_set_brightness_intent(self, message: Message):
         self.log.info(message.data)
+        if not self.check_client_connection():
+            return
         device = self._get_device_from_message(message)
         brightness = message.data.get("brightness")
 
@@ -270,6 +315,8 @@ class HomeAssistantSkill(OVOSSkill):
     @intent_handler("lights.increase.brightness.intent")  # pragma: no cover
     def handle_increase_brightness_intent(self, message: Message):
         self.log.info(message.data)
+        if not self.check_client_connection():
+            return
         if device := self._get_device_from_message(message):
             response = self.ha_client.handle_increase_light_brightness(Message("", {"device": device}))
             brightness = response.get("brightness", "unknown percentage")
@@ -286,6 +333,8 @@ class HomeAssistantSkill(OVOSSkill):
     @intent_handler("lights.decrease.brightness.intent")  # pragma: no cover
     def handle_decrease_brightness_intent(self, message: Message):
         self.log.info(message.data)
+        if not self.check_client_connection():
+            return
         if device := self._get_device_from_message(message):
             response = self.ha_client.handle_decrease_light_brightness(Message("", {"device": device}))
             brightness = response.get("brightness", "unknown percentage")
@@ -302,6 +351,8 @@ class HomeAssistantSkill(OVOSSkill):
     @intent_handler("lights.get.color.intent")  # pragma: no cover
     def handle_get_color_intent(self, message: Message):
         self.log.info(message.data)
+        if not self.check_client_connection():
+            return
         if device := self._get_device_from_message(message):
             response = self.ha_client.handle_get_light_color(Message("", {"device": device}))
             if response and not response.get("response"):
@@ -315,6 +366,8 @@ class HomeAssistantSkill(OVOSSkill):
     @intent_handler("lights.set.color.intent")  # pragma: no cover
     def handle_set_color_intent(self, message: Message):
         self.log.info(message.data)
+        if not self.check_client_connection():
+            return
         device = self._get_device_from_message(message)
         color = message.data.get("color")
 
@@ -342,6 +395,8 @@ class HomeAssistantSkill(OVOSSkill):
     @intent_handler("assist.intent")  # pragma: no cover
     def handle_assist_intent(self, message: Message):
         """Handle passthrough to Home Assistant's Assist API."""
+        if not self.check_client_connection():
+            return
         command = message.data.get("command")
         if command:
             self.ha_client.handle_assist_message(Message("", {"command": command}))

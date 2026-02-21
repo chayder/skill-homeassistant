@@ -1,5 +1,46 @@
 # Changelog
 
+## [1.0.0](https://github.com/OscillateLabsLLC/skill-homeassistant/compare/v0.6.2...v1.0.0) (2026-02-16)
+
+
+### ⚠ BREAKING CHANGES
+
+* remove support for old PHAL plugin config
+* switch plugin entrypoint to OVOS standard
+
+### Features
+
+* remove support for old PHAL plugin config ([32d7463](https://github.com/OscillateLabsLLC/skill-homeassistant/commit/32d74630913276330cee031cf7251a9bebc55fec))
+* switch plugin entrypoint to OVOS standard ([e0696fe](https://github.com/OscillateLabsLLC/skill-homeassistant/commit/e0696fe89c407588e9a56292e9aad17a749c41eb))
+
+## [0.6.2](https://github.com/OscillateLabsLLC/skill-homeassistant/compare/v0.6.1...v0.6.2) (2026-02-16)
+
+
+### Bug Fixes
+
+* properly rebuild device list from Home Assistant on command ([4ea6742](https://github.com/OscillateLabsLLC/skill-homeassistant/commit/4ea67428470b7d6286c2a07540794e70c4049852))
+
+## [0.6.1](https://github.com/OscillateLabsLLC/skill-homeassistant/compare/v0.6.0...v0.6.1) (2026-02-16)
+
+
+### Bug Fixes
+
+* bus callback for config init ([ef99d04](https://github.com/OscillateLabsLLC/skill-homeassistant/commit/ef99d0420ec85336d0e0bb11320fc618487ab80e))
+
+## [0.6.0](https://github.com/OscillateLabsLLC/skill-homeassistant/compare/v0.5.3...v0.6.0) (2026-02-16)
+
+
+### Features
+
+* lazy load HA client connection and give user instructions ([7bea00e](https://github.com/OscillateLabsLLC/skill-homeassistant/commit/7bea00e862c80938623e954ae5670e7cfabc8964))
+
+
+### Bug Fixes
+
+* bus callback for config init ([a7bef9f](https://github.com/OscillateLabsLLC/skill-homeassistant/commit/a7bef9f03ee2961ff178903c3538ff95ec899da8))
+* removing required config also removes prior valid connection ([752dfe9](https://github.com/OscillateLabsLLC/skill-homeassistant/commit/752dfe9a6326a2f02a0c7f7126a5cbd4dac81502))
+* settings change owned fully by skill ([9b6b4dd](https://github.com/OscillateLabsLLC/skill-homeassistant/commit/9b6b4dde20a7208277251b630b0911aff63a0796))
+
 ## [0.5.3](https://github.com/OscillateLabsLLC/skill-homeassistant/compare/v0.5.2...v0.5.3) (2026-01-12)
 
 

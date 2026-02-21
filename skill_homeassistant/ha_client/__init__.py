@@ -34,7 +34,6 @@ class HomeAssistantClient:
         self.registered_devices = []  # Device objects
         self.registered_device_names = []  # Device friendly/entity names
 
-        self.munged_id = "ovos-PHAL-plugin-homeassistant_homeassistant-phal-plugin"
         self.instance_available = False
         self.device_types = SUPPORTED_DEVICES
         self.brightness_increment = self.get_brightness_increment()
@@ -46,10 +45,13 @@ class HomeAssistantClient:
         self.init_configuration()
 
     def _register_bus_events(self) -> None:
-        """Register message bus events. Only call if self.bus is not None."""
+        """Register message bus events. Only call if self.bus is not None.
+
+        Note: configuration.updated/configuration.patch are NOT handled here.
+        The skill layer owns settings and should call update_config() when they change.
+        """
         assert self.bus is not None  # Help type checker understand bus cannot be None here
-        self.bus.on("configuration.updated", self.init_configuration)
-        self.bus.on("configuration.patch", self.init_configuration)
+        # Currently no bus events registered here - skill handles config changes
 
     def get_brightness_increment(self) -> int:
         """Get the brightness increment from the config
@@ -102,21 +104,28 @@ class HomeAssistantClient:
             return False
 
     # INSTANCE INIT OPERATIONS
-    def init_configuration(self, *args, **kwargs):
-        """Initialize instance configuration"""
-        LOG.info(f"Initializing configuration with args: {args} and kwargs: {kwargs}")
-        self.config["host"] = kwargs.get("configuration_host", self.config.get("host", ""))
-        self.config["api_key"] = kwargs.get("configuration_api_key", self.config.get("api_key", ""))
-        if args:
-            LOG.warning(
-                f"Received unexpected args: {args}, ignoring them in configuration initialization. Use kwargs instead."
-            )
+    def update_config(self, new_config: dict) -> None:
+        """Update the client configuration and reinitialize.
+
+        Call this when skill settings change to push new config to the client.
+
+        Args:
+            new_config: New configuration dict with host, api_key, etc.
+        """
+        self.config.update(new_config)
+        self.init_configuration()
+
+    def init_configuration(self, message=None):
+        """Initialize instance configuration.
+
+        Args:
+            message: Optional Message object from bus callback (ignored, config comes from self.config)
+        """
         configuration_host = self.config.get("host", "")
         configuration_api_key = self.config.get("api_key", "")
         configuration_assist_only = self.config.get("assist_only", True)
         configuration_verify_ssl = self.config.get("verify_ssl", True)
         if configuration_host != "" and configuration_api_key != "":
-            self.instance_available = True  # TODO: Use the validator to check this
             self.connector = HomeAssistantRESTConnector(
                 host=configuration_host,
                 api_key=configuration_api_key,
@@ -125,13 +134,44 @@ class HomeAssistantClient:
                 timeout=self.config.get("timeout", 3),
             )
             self.devices = self.connector.get_all_devices()
+            if len(self.devices) > 0:
+                self.instance_available = True  # TODO: Use the validator to check this
             self.registered_devices = []
             self.build_devices()
         else:
+            # Clear stale connection state when config is removed
             self.instance_available = False
+            self.connector = None
+            self.devices = []
+            self.registered_devices = []
+            self.registered_device_names = []
+
+    def refresh_devices(self) -> int:
+        """Refresh devices from Home Assistant API.
+
+        Fetches fresh device data from HA and rebuilds the device list.
+
+        Returns:
+            int: The number of devices registered after refresh.
+        """
+        if not self.connector:
+            LOG.warning("Cannot refresh devices: no connector configured")
+            return 0
+
+        LOG.info("Refreshing device list from Home Assistant")
+        self.devices = self.connector.get_all_devices()
+        self.registered_devices = []
+        self.registered_device_names = []
+        self.build_devices()
+        LOG.info(f"Device refresh complete: {len(self.registered_devices)} devices registered")
+        return len(self.registered_devices)
 
     def build_devices(self, *args, **kwargs):
-        """Build the devices from the Home Assistant API"""
+        """Build the devices from the cached device list.
+
+        Note: This processes self.devices but does not fetch fresh data.
+        Use refresh_devices() to fetch fresh data from Home Assistant.
+        """
         LOG.info(f"Initializing configuration with args: {args} and kwargs: {kwargs}")
         for device in self.devices:
             device_type = map_entity_to_device_type(device["entity_id"])
